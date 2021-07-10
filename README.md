@@ -3,7 +3,7 @@
 ## Project description
 
 The aim of the project is to compare accuracy of forecasts of prices of two cointegrated
-financial instruments with: a) the VECM/VAR model and b) two independent univariate ARIMA models.
+financial instruments with: a) the **VECM/VAR** model and b) two independent univariate **ARIMA** models.
 
 In oder to acomplish the task you should:
 
