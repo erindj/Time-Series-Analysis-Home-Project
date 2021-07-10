@@ -1,0 +1,1264 @@
+---
+title: "TSA 2020/2021 Home Project 1"
+author: "Erind Jasini, Diana Zhaken"
+date: "`r Sys.time()`"
+output:
+  html_document:
+    theme: spacelab
+    highlight: tango
+    toc: yes
+    toc_float:
+      collapsed: no
+      smooth_scrool: yes
+  pdf_document:
+    toc: yes
+editor_options:
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo    = TRUE, 
+                      cache   = TRUE,
+                      message = FALSE, 
+                      warning = FALSE)
+options(scipen = 10)
+```
+
+```{r}
+##############################################################
+# Leading Professor: dr Paweł Sakowski                        #                            
+#                                                             #
+# Faculty of Economic Sciences, University of Warsaw          #
+#                                                             #
+# Time Series Analysis, Spring 2021                           #
+#                                                             #
+##############################################################
+```
+
+```{r eval = FALSE}
+install.packages('tinytex')
+install.packages("tseries")
+install.packages("urca")
+install.packages("fUnitRoots")
+install.packages("vars")
+install.packages("dplyr")
+install.packages("kableExtra")
+```
+
+# Scope, Aim and Objective of study
+
+Scope of study is to perform time series analysis in a certain set of data. This process involves running statistical test in order to arrive at conclusions backed up by empirical evidences.
+
+As the aim of the study we can refer to presented set of data. It involves time series of ten financial instruments which we need to compare forecasted prices accuracies.
+
+The objective is to find one pair of cointegrated financial instruments running statistical tests and after that estimating future prices using following models:
+
++ VECM/VAR model.
+
++ ARIMA model.
+
+The first step of the project is focused on confirmation of non –
+stationarity of time series. Afterwards, we take one pair of the financial instruments that we assume (stock4 and stock10) that have a higher chance of being cointegrated and we can continue with data diagnostics with this pair. Subsequently, we perform cointegration test and as a result we can confirm that stock4 and stock 10 are cointegrated.
+
+When it comes to the forecast part with VAR, we deployed the
+predict command, where we can forecast 10 steps ahead. As a result, we have predictions of stock4 and stock10 for the 10 days. 
+
+However, we should remember that the forecast always depends on at least one alternative way of forecasting. 
+Thus, we have built ARIMA model to assess and compare the accuracy of the forecasts. In this step we went through following process: initial identification of orders p and q; model estimation; model diagnostics and forecasting. 
+As a result, we have produced forecast for 10 – periods ahead interval.
+
+# 1 Data importing and plotting
+
+First we need to load our packages
+```{r cache = F}
+library(zoo)
+library(xts)
+library(lmtest)
+library(tidyverse)
+library(urca)
+library(forecast)
+library(fUnitRoots)
+library(vars)
+library(ggplot2)
+library(tseries)
+library(kableExtra)
+library(knitr)
+library(dplyr)
+```
+
+```{r}
+source("functions/testdf.R")
+source("functions/function_plot_ACF_PACF_resids.R")
+```
+
+We will work with the price indexes of ten financial instruments.
+
+Importing data from the `csv` file:
+```{r}
+data <- read.csv("data/data.csv")
+```
+
+Verification of the structure:
+```{r}
+data %>% glimpse()
+head(data)
+tail(data)
+```
+It seems to be OK!
+
+Now we have to correct the type of the `date` variable:
+```{r}
+data$date <- as.Date(data$date, format = "%m/%d/%Y")
+data %>% glimpse()
+```
+
+Now, we can transform it into the `xts` object:
+```{r}
+data <- xts(data[, -1], data$date)
+```
+
+We just plot the variables one by one and see if everything was imported correctly. Also visualizing data graphically will allow us to make some based assumptions of our dataset.
+```{r}
+stock1 <- data[ ,1] 
+stock2 <- data[ ,2]
+stock3 <- data[ ,3]
+stock4 <- data[ ,4]
+stock5 <- data[ ,5]
+stock6 <- data[ ,6]
+stock7 <- data[ ,7]
+stock8 <- data[ ,8]
+stock9 <- data[ ,9]
+stock10 <- data[ ,10]
+plot(stock1, main = "First Financial Instrument")
+plot(stock2, main = "Second Financial Instrument")
+plot(stock3, main = "Third Financial Instrument")
+plot(stock4, main = "Fourth Financial Instrument")
+plot(stock5, main = "Fifth Financial Instrument")
+plot(stock6, main = "Sixth Financial Instrument")
+plot(stock7, main = "Seventh Financial Instrument")
+plot(stock8, main = "Eighth Financial Instrument")
+plot(stock9, main = "Ninth Financial Instrument")
+plot(stock10, main = "Tenth Financial Instrument")
+               
+```
+
+From the first look it seems that we are dealing with non-stationary time series but we have to run some data diagnostics to have empirical evidence. 
+
++ We firstly need to make sure if time series is non-stationarity, if two variables are stationary than cointegration is pointless and we need to ignore that pair.
+
++ Additionally, if two variables have different order of integration than they can't be cointegrated so we ignore that pair too. 
+
++ If the two variables are non-stationarity and have the same order of integration than we move to the next steps of our time series analysis.
+
+*We will make a somewhat an arbitrary decision and select one pair (stock4 and stock10) speculating that this pair have higher chance of being cointegrated and continue with some data diagnostics with this pair.*
+
+
+# 2 Phillips-Perron (PP) Test
+To check for stationarity we will conduct the Phillips-Perron (PP) test. Phillips–Perron test is a unit root test.
+
+That it is used in time series analysis to test the null hypothesis that a time series is integrated of order 1. It builds on the Dickey–Fuller test of the null hypothesis $\rho =1$ in  $\Delta y_{t}=(\rho -1)y_{t-1}+u_{t}$, where $\Delta$ is the first difference operator. 
+
+Like the augmented Dickey–Fuller test, the Phillips–Perron test addresses the issue that the process generating data for $y_{t}$ might have a higher order of autocorrelation than is admitted in the test equation—making $y_{t-1}$ endogenous and thus invalidating the Dickey–Fuller t-test. 
+
+Whilst the augmented Dickey–Fuller test addresses this issue by introducing lags of $\Delta y_{t}$ as regressors in the test equation, the Phillips–Perron test makes a non-parametric correction to the t-test statistic. The test is robust with respect to unspecified autocorrelation and heteroscedasticity in the disturbance process of the test equation.
+
+However, as Davidson and MacKinnon (2004) report, the PP test performs worse in finite samples than the ADF test.
+
+The null and alternative hypotheses are the same as in ADF:
+
+* $H_0:$ time series is not stationary (integrated of order $\ge 1$) 
+* $H_a:$ time series is stationary (integrated of order $= 0$)
+
+```{r}
+pp.test <- ur.pp(stock4,   # tested series
+                 type = c("Z-tau"),     # standardization of the test statistic needed
+                 model = c("constant")) # constant deterministic component
+                 # which means we assume that any trends in the data are stochastic
+summary(pp.test)
+```
+
+Value of the test-statistic Z-tau (`r pp.test@teststat %>% round(3)`) is higher 
+than the 5% critical value (`r pp.test@cval[2] %>% round(3)`), so we **cannot reject** the null about non-stationarity of our fourth financial instrument.
+
+Let's test stock4's first differences:
+
+```{r}
+pp.test.d <- ur.pp(diff.xts(stock4), 
+                   type = c("Z-tau"), 
+                   model = c("constant")) # constant deterministic component
+summary(pp.test.d)
+```
+
+Value of the test-statistic Z-tau (`r pp.test.d@teststat %>% round(3)`) is now lower than the 5% critical value (`r pp.test@cval[2] %>% round(3)`), so now we **reject** the null about non-stationarity of stock4's first differences.
+
+Next we run the same test to stock10.
+
+```{r}
+pp.test <- ur.pp(stock10,   # tested series
+                 type = c("Z-tau"),     # standardization of the test statistic needed
+                 model = c("constant")) # constant deterministic component
+                 # which means we assume that any trends in the data are stochastic
+summary(pp.test)
+```
+
+Value of the test-statistic Z-tau (`r pp.test@teststat %>% round(3)`) is higher 
+than the 5% critical value (`r pp.test@cval[2] %>% round(3)`), so we **cannot reject** the null about non-stationarity of our tenth financial instrument.
+
+Let's also test stock10's first differences:
+
+```{r}
+pp.test.d <- ur.pp(diff.xts(stock10), 
+                   type = c("Z-tau"), 
+                   model = c("constant")) # constant deterministic component
+summary(pp.test.d)
+```
+
+Value of the test-statistic Z-tau (`r pp.test.d@teststat %>% round(3)`) is now lower than the 5% critical value (`r pp.test@cval[2] %>% round(3)`), so now we **reject** the null about non-stationarity of stock10's first differences.
+
+As a result we can estimate that `stock4` and `stock10` have the same order of integration ~ `I(1)` but we have to run further tests to confirm.
+
+# 3 Cointegration testing
+
+First we plot both variables on the graph:
+
+```{r}
+cbind(stock4, stock10) %>% 
+  as_tibble() %>%
+  mutate(date = index(data)) %>%
+  pivot_longer(!date) %>%
+  ggplot(aes(date, value, col = name)) +
+  geom_line() +
+  theme_bw() +
+  labs(
+    title = "Selected Pair of Financial Instruments")
+```
+
+We will work the the `stock4` and `stock10` variables. Let's create their first differences.
+```{r}
+dy4 <- diff.xts(stock4)
+dy10 <- diff.xts(stock10)
+```
+
+To estimate the cointegrating vector, we will estimate the following model:
+```{r}
+model.coint <- lm(stock4 ~ stock10, data=data)
+```
+
+Let's examine the model summary:
+```{r}
+summary(model.coint)
+```
+
+Next, we have to test stationarity of residuals. What is the proper ADF statistic? 
+```{r}
+testdf(variable = residuals(model.coint), max.augmentations = 3)
+```
+
+What is the result of cointegration test? What is the cointegrating vector? 
+
+The ADF test with no augmentations can be used its result is that non-stationarity of residuals is **STRONGLY REJECTED**, so residuals are **stationary**, which means that `stock4` and `stock10` are **cointegrated**.
+
+The cointegrating vector is [1, `r -summary(model.coint)$coefficients[1, 1] %>% round(3)` , `r -summary(model.coint)$coefficients[2, 1] %>% round(3)`]
+
+which defines the cointegrating relationship as: 1 * stock4 - `r summary(model.coint)$coefficients[1, 1] %>% round(3)` - `r summary(model.coint)$coefficients[2, 1] %>% round(3)` * stock10,
+
+Now, we established that stock4 and stock10 are cointegrated we ignore other variables of our dataset
+
+```{r}
+ourpair <- cbind(stock4, stock10)
+```
+
+Next, we create first lags of residuals and adding them to the dataset
+
+```{r}
+ourpair$lresid <- lag.xts(residuals(model.coint))
+```
+
+# 4 Granger causality test
+
+Now let's check, whether `stock10` Granger causes `stock4` and vice versa. What is the proper lag length in this case? 
+
+Let's try with 3 lags. First, the `stock10` as the dependent variable:
+```{r}
+grangertest(y10 ~ y4,
+            data = ourpair,
+            order = 3) # lag assumed
+```
+Is `stock4` a Granger cause of `stock10`?
+
+Next, the `stock4` as the dependent variable.
+```{r}
+grangertest(y4 ~ y10,
+            data = ourpair,
+            order = 3) # lag assumed
+```
+Is `stock10` a Granger cause of `stock4`?
+
+In both cases the null about **NO CAUSALITY** is **rejected**, at least at the 95% confidence level.
+
+Now, let's repeat the analysis for 4 lags.
+```{r}
+grangertest(y10 ~ y4,
+            data = ourpair,
+            order = 4) # lag assumed
+```
+Is `stock2` a Granger cause of `stock10`?
+
+```{r}
+grangertest(y4 ~ y10,
+            data = ourpair,
+            order = 4) # lag assumed
+```
+Is `stock10` a Granger cause of `stock4`?
+
+Again, let's repeat the analysis for 5 lags:
+```{r}
+grangertest(y10 ~ y4,
+            data = ourpair,
+            order = 5) # lag assumed
+```
+Is `stock4` a Granger cause of `stock10`?
+
+```{r}
+grangertest(y4 ~ y10,
+            data = ourpair,
+            order = 5) # lag assumed
+```
+Is `stock10` a Granger cause of `stock4`?
+
+What is the conclusion? 
+
+At 5% significance level (or 95% confidence level) we have so called **bi-directional feedback** in all cases. 
+
+Now, we have to note, that the Granger causality analysis above is based on the **non-stationary** time series. If we wanted to remove risks of getting spurious regressions, we should rather use the **differenced** time series. 
+
+Let's do the same process for first differencies
+
+```{r}
+grangertest(dy4[-1,] ~ dy10[-1,],
+            data = ourpair,
+            order = 3) # lag assumed
+```
+
+Is the null about **NO CAUSALITY** still **rejected**?
+
+Let's make `stock10` as the dependent variable.
+
+```{r}
+grangertest(dy10[-1,] ~ dy4[-1,],#removing the first data entry which is N/A
+            data = ourpair,
+            order = 3) # lag assumed
+```
+
+The result changed, now we cannot reject the null about **NO CAUSALITY**.
+
+Let's repeat the same process with 4 lags.
+
+```{r}
+grangertest(dy4[-1,] ~ dy10[-1,], #removing the first data entry which is N/A
+            data = ourpair,
+            order = 4) # lag assumed
+```
+
+Null hypothesis about **NO CAUSALITY** still **rejected**.
+
+```{r}
+grangertest(dy10[-1,] ~ dy4[-1,], #removing the first data entry which is N/A
+            data = ourpair,
+            order = 4) # lag assumed
+```
+
+Again, here we cannot reject the null about **NO CAUSALITY** of stock10 causing stock4.
+
+# 5 VAR model Estimation 
+
+Since we observed bi-directional causality we can try to estimate a bi-variate VAR model. First we bind our analyzed variables
+
+```{r}
+y4_y10 <- cbind(stock4, stock10)
+```
+
+To consider the degree of persistence in the data we make use of the autocorrelation function.
+
+First question: what is the proper order (lag length) of the VAR model? We may use information criteria to get some hints about it.
+```{r}
+VARselect(y4_y10, # input data for VAR
+          lag.max = 6)     # maximum lag
+```
+
+Perhaps it would be easier if we slightly reorganize the output:
+```{r}
+VARselect(y4_y10, lag.max = 6) %>%
+  .$criteria %>% 
+  t() %>% 
+  as_tibble() %>% 
+  mutate(nLags = 1:nrow(.)) %>%
+  #select(nLags, everything()) %>%
+  kbl(digits = 3) %>%
+  kable_classic("striped", full_width = F)
+```
+
+All criteria suggest order 3. Notice!: the smaller value of information criteria, the better the model!
+
+What about potential seasonality? Than we need to include seasonal dummies, the option `season = ` is responsible for that.
+
+```{r}
+library(formattable)
+VARselect(y4_y10,         # input data for VAR
+          lag.max = 6,     # maximum lag
+          season = 12)     # seasonal frequency
+VARselect(y4_y10, lag.max = 6, season = 12) %>%
+  .$criteria %>% 
+  t() %>% 
+  as_tibble() %>% 
+  mutate(nLags = 1:nrow(.)) %>%
+  #select(nLags, everything()) %>%
+  kbl(digits = 3) %>%
+  kable_classic("striped", full_width = F)
+```
+
+Again all information criteria suggest the use of three lags.
+
+As a result, let's estimate the model with 3 lags and seasonal dummies.
+
+```{r}
+y4_y10.var3 <- VAR(y4_y10,
+                    p = 3,  # order of VAR model
+                    season = 12)
+```
+
+Now, let's examine the summary of the model:
+```{r}
+summary(y4_y10.var3)
+```
+
+Most of seasonal dummies seem to be significant.
+
+Let's do some basic diagnostics:
+```{r fig.width = 12, fig.height=12}
+plot(y4_y10.var3)
+```
+
+The panels present:
+
+* panel 1: original and fitted values
+* panel 2: residuals from the model
+* panel 3: ACF and PACF for residuals
+
+It still looks like the 3rd lags of ACF and PACF might be still significant (bars on the border of significance).
+
+Alternatively, we could use the Breusch-Godfrey (BG) test:
+```{r}
+serial.test(y4_y10.var3, type = "BG")
+```
+
+Hence, we can conclude that the null should be rejected.
+
+Let's now perform the Portmanteau test to verify the null hypothesis of nO autocorrelation of residuals.
+
+```{r}
+serial.test(y4_y10.var3)
+```
+
+H0 is still rejected.
+
+# 6 Forecast Error Variance Decomposition
+
+To generate the forecast error variance decomposition we make use of the fevd command, where we set the number of steps ahead to ten.
+
+The variance decomposition indicates the amount of information each variable contributes to the other variables in the auto-regression. It determines how much of the forecast error variance of each of the variables can be explained by exogenous shocks to the other variables.
+
+```{r}
+plot(fevd(y4_y10.var3, n.ahead = 10))
+```
+
+What is worth noting is that stock4 and stock10 influent each other to the same magnitude.
+
+# 7 Forecasting with VAR
+
+To forecast forward we can make use of the predict command, where in this case we are forecasting 10 steps ahead. We are also looking to make use of 95% confidence intervals for the forecast.
+
+Lets estimate a model on a shorter sample:
+```{r}
+tail(y4_y10, 15)
+```
+
+Lets put aside last 10 observations:
+```{r}
+y4_y10.short <- y4_y10["/2021-03-18",]
+tail(y4_y10.short)
+```
+
+VAR model estimation on a shorter sample:
+```{r}
+y4_y10.var3.short <- VAR(y4_y10.short, 
+                          p = 3,
+                          season = 12)
+```
+
+Now, let's and run the forecasts:
+```{r}
+y4_y10.var3.forecast <- predict(y4_y10.var3.short,
+                                 n.ahead = 10,
+                                 ci = 0.95) # 95% confidence interval
+```
+
+Lets see the result:
+```{r}
+y4_y10.var3.forecast
+str(y4_y10.var3.forecast)
+```
+
+Forecasts are in the first element called `$fcst`.
+
+VAR forecasts for `y4`:
+```{r}
+y4_y10.var3.forecast$fcst$y4
+```
+
+VAR forecasts for `y10`:
+```{r}
+y4_y10.var3.forecast$fcst$y10
+```
+
+Lets store it as an `xts` object. Correct set of dates (index) can be extracted from the original `xts` data object.
+```{r}
+tail(index(y4_y10), 10)
+```
+
+Hence, we can build the `xts` object:
+```{r}
+y4_forecast <- xts(y4_y10.var3.forecast$fcst$y4[,-4], 
+                    # we exclude the last column with CI
+                    tail(index(y4_y10), 10))
+```
+
+Now, we will change the names:
+```{r}
+names(y4_forecast)
+names(y4_forecast) <- c("Y4_fore", "Y4_lower", "Y4_upper")
+```
+
+Lets do the same for `y10` forecasts:
+```{r}
+y10_forecast <- xts(y4_y10.var3.forecast$fcst$y10[,-4], 
+                    # we exclude the last column with CI
+                    tail(index(y4_y10), 10))
+names(y10_forecast) <- c("Y10_fore", "Y10_lower", "Y10_upper")
+```
+
+Now, we can merge all three objects together.
+```{r}
+y4_y10 <- merge(y4_y10, 
+                 y4_forecast,
+                 y10_forecast)
+```
+
+Lets compare the forecasts and real data on the plot. 
+
+Plot of `y4` forecasts:
+```{r}
+plot(y4_y10[, c("y4", "Y4_fore",
+                 "Y4_lower", "Y4_upper")], 
+     major.ticks = "days", 
+     grid.ticks.on = "days",
+     grid.ticks.lty = 10,
+     main = "10 days forecast of fourth financial instrument",
+     col = c("black", "blue", "red", "red"))
+```
+
+Lets zoom it on the latest month:
+```{r}
+plot(y4_y10["2021-03-18/", c("y4", "Y4_fore",
+                        "Y4_lower", "Y4_upper")], 
+     major.ticks = "days", 
+     grid.ticks.on = "days",
+     grid.ticks.lty = 10,
+     main = "10 days forecast of fourth financial instrument",
+     col = c("black", "blue", "red", "red"))
+```
+
+The assessment of any forecast is of relative character. It always depends on at least one alternative way of forecasting these values!
+
+Plot of `y10` forecasts for last ten days:
+```{r}
+plot(y4_y10["2021-03-18/", c("y10", "Y10_fore",
+                        "Y10_lower", "Y10_upper")], 
+     major.ticks = "days", 
+     grid.ticks.on = "days",
+     grid.ticks.lty = 10,
+     main = "10 days forecast of tenth financial instrument",
+     col = c("black", "blue", "red", "red"))
+```
+
+Lets calculate forecast accuracy measures. 
+```{r}
+y4_y10$mae.y10   <-  abs(y4_y10$y10 - y4_y10$Y10_fore)
+y4_y10$mse.y10   <-  (y4_y10$y10 - y4_y10$Y10_fore) ^ 2
+y4_y10$mape.y10  <-  abs((y4_y10$y10 - y4_y10$Y10_fore)/y4_y10$y10)
+y4_y10$amape.y10 <-  abs((y4_y10$y10 - y4_y10$Y10_fore) / 
+                            (y4_y10$y10 + y4_y10$Y10_fore))
+
+y4_y10$mae.y4   <-  abs(y4_y10$y4 - y4_y10$Y4_fore)
+y4_y10$mse.y4   <-  (y4_y10$y4 - y4_y10$Y4_fore) ^ 2
+y4_y10$mape.y4  <-  abs((y4_y10$y4 - y4_y10$Y4_fore)/y4_y10$y4)
+y4_y10$amape.y4 <-  abs((y4_y10$y4 - y4_y10$Y4_fore) / 
+                            (y4_y10$y4 + y4_y10$Y4_fore))
+```
+
+The structure looks like this:
+```{r}
+tail(y4_y10, 15)
+```
+
+Finally, we can calculate its averages:
+```{r}
+colMeans(y4_y10[, 9:16], na.rm = TRUE)
+```
+
+Conclusions:
+
+1. It seems that our forecasted values are pretty accurate.
+
+2. MAPE (Mean absolute percent error) and aMAPE (Average mean absolute percent error) are pretty close to 0 `[respectively 1.8% and 0.8%]` for both our financial instruments suggesting that the model is a perfect fit.
+
+3. The mean absolute percentage error (MAPE) is the most common measure used to forecast error, and works best if there are no extremes to the data (and no zeros).
+
+# 8 ARIMA Model Building and Forecasting
+
+ARIMA (Autoregressive Integrated Moving Average) model is of the following form:
+*ARIMA(p,d,q)* where,
+
+**p => lag order**
+
+**d => order of differencing**
+
+**q => size of moving average**
+
+The *AR* part of *ARIMA* indicates that the evolving variable of interest is regressed on its own lagged (i.e., prior) values. The *MA* part indicates that the regression error is actually a linear combination of error terms whose values occurred contemporaneously and at various times in the past. 
+
+The *I* (for "integrated") indicates that the data values have been replaced with the difference between their values and the previous values (and this differencing process may have been performed more than once). The purpose of each of these features is to make the model fit the data as well as possible.
+
+## 8.1 Box-Jenkins procedure
+
+Below we apply the Box-Jenkins procedure. 
+
+Box–Jenkins method, applies autoregressive moving average (ARMA) or autoregressive integrated moving average (ARIMA) models to find the best fit of a time-series model to past values of a time series.
+
+The original model uses an iterative three-stage modeling approach:
+
++ *Model identification* and *model selection*: making sure that the variables are stationary, identifying seasonality in the dependent series (seasonally differencing it if necessary), and using plots of the autocorrelation (ACF) and partial autocorrelation (PACF) functions of the dependent time series to decide which (if any) autoregressive or moving average component should be used in the model.
+
++ *Parameter estimation* using computation algorithms to arrive at coefficients that best fit the selected ARIMA model. The most common methods use maximum likelihood estimation or non-linear least-squares estimation.
+
++ *Statistical model checking* by testing whether the estimated model conforms to the specifications of a stationary univariate process. In particular, the residuals should be independent of each other and constant in mean and variance over time. (Plotting the mean and variance of residuals over time and performing a Ljung–Box test or plotting autocorrelation and partial autocorrelation of the residuals are helpful to identify misspecification.) If the estimation is inadequate, we have to return to step one and attempt to build a better model.
+
+## 8.1.1 step 1 - initial identification of orders `p` and `q` 
+
+Lets see ACF and PACF. The ACF and PACF are calculated up to 36th lag.
+First, let's concentrate on the AIC information criterion.
+
+```{r eval = F}
+acf(stock4,
+    lag.max = 36, # max lag for ACF
+    ylim = c(-0.5, 0.5),    # limits for the y axis - we give c(min,max)
+    lwd = 5,               # line width
+    col = "dark green") 
+```
+
+If there are missing values in the data we need to add an additional argument `na.action = na.pass` (see below).
+
+Lets plot them together and limit the scale of ACF:
+```{r}
+par(mfrow = c(2, 1)) 
+acf(stock4,
+    lag.max = 36, # max lag for ACF
+    ylim = c(-0.5, 0.5),   # limits for the y axis - we give c(min, max)
+    lwd = 5,               # line width
+    col = "dark green",
+    na.action = na.pass)   # do not stop if there are missing values in the data
+pacf(stock4, 
+     lag.max = 36, 
+     lwd = 5, col = "dark green",
+     na.action = na.pass)
+par(mfrow = c(1, 1)) # we restore the original single panel
+```
+
+ACF and PACF suggest that maybe `ARIMA(1,1,1)` could be a sensible model for our fourth financial instrument stock4.
+
+From the ACF plot we can observe the exponential decay in the seasonal lags of the ACF and a spike at lag 17 in the PACF.
+
+Lets apply first differencies
+```{r}
+stock4diff <- diff(stock4)
+```
+
+Lets plot first differencies for `stock4`
+```{r}
+par(mfrow = c(2, 1)) 
+acf(stock4diff,
+    lag.max = 36, # max lag for ACF
+    ylim = c(-0.5, 0.5),   # limits for the y axis - we give c(min, max)
+    lwd = 5,               # line width
+    col = "dark green",
+    na.action = na.pass)   # do not stop if there are missing values in the data
+pacf(stock4diff, 
+     lag.max = 36, 
+     lwd = 5, col = "dark green",
+     na.action = na.pass)
+par(mfrow = c(1, 1)) # we restore the original single panel
+```
+
+The data shows that we are dealing with a non-stationary time series, with some seasonality, so we will first take a seasonal difference. This also appears to be non-stationary, so we take an additional first difference
+
+```{r}
+stock4diff_diff <- diff(stock4diff)
+```
+
+Lets plot the data
+```{r}
+par(mfrow = c(2, 1)) 
+acf(stock4diff_diff,
+    lag.max = 36, # max lag for ACF
+    ylim = c(-0.5, 0.5),   # limits for the y axis - we give c(min, max)
+    lwd = 5,               # line width
+    col = "dark green",
+    na.action = na.pass)   # do not stop if there are missing values in the data
+pacf(stock4diff_diff, 
+     lag.max = 36, 
+     lwd = 5, col = "dark green",
+     na.action = na.pass)
+par(mfrow = c(1, 1)) # we restore the original single panel
+```
+
+The significant spike at lag 1 in the ACF suggests a non-seasonal MA(1) component, and the significant spike at lag 2 in the ACF suggests a seasonal MA(1) component.
+
+## 8.1.2 step 2 - model estimation
+
+Lets build `ARIMA(1,1,1)`. We use `Arima()` function from the `forecast` package:
+
+```{r}
+arima111 <- Arima(stock4,  # variable
+                  order = c(1, 1, 1)  # (p,d,q) parameters
+                  )
+```
+
+By default the model on differenced data ($d = 1$) is estimated without a constant term. This means that first differences will fluctuate around 0. 
+
+The simple report doesn't contain much content:
+
+```{r}
+arima111
+```
+
+Lets use the `coeftest()` function from the `lmtest` package to test for significance of model parameters:
+
+```{r}
+coeftest(arima111)
+```
+
+Additional summary measures (eg. information criteria):
+
+```{r}
+summary(arima111)
+```
+
+Both parameters are significant. 
+
+However, using such syntax produces a model without a constant term. The constant is included by default when `d = 0`.
+
+If we wanted to include a constant also when `d = 1`, we would use an additional argument `include.constant = T`:
+
+```{r}
+arima111_2 <- Arima(stock4,  # variable
+                    order = c(1, 1, 1),  # (p,d,q) parameters
+                    include.constant = TRUE)  # including a constant
+```
+
+A constant for a model with `d = 1` is reported as a drift parameter.
+
+```{r}
+coeftest(arima111_2)
+```
+
+From our results `d = 1` is statistically significant.
+
+## 8.1.3 step 3 - model diagnostics
+
+In the diagnostics step, we ask the fundamental question: are residuals of `arima111` model a realization of white noise process? 
+
+The `resid()` function applied to model results returns residuals
+```{r}
+plot(resid(arima111))
+```
+
+We can also use the `ggplot` approach to include date values on the horizontal axis:
+```{r}
+tibble(
+  date = index(stock4),
+  resid = arima111 %>% resid() %>% as.numeric()
+) %>%
+  ggplot(aes(date, resid)) +
+  geom_line(col = "royalblue3") +
+  theme_bw()
+```
+
+Lets check the ACF and the PACF values:
+```{r}
+par(mfrow = c(2, 1)) 
+acf(resid(arima111), 
+    lag.max = 36,
+    ylim = c(-0.5, 0.5), 
+    lwd = 5, col = "dark green",
+    na.action = na.pass)
+pacf(resid(arima111), 
+     lag.max = 36, 
+     lwd = 5, col = "dark green",
+     na.action = na.pass)
+par(mfrow = c(1, 1))
+```
+
+Only lag 17 seem to be significant.
+
+The Ljung-Box test (for a maximum of 10 lags):
+```{r}
+Box.test(resid(arima111), type = "Ljung-Box", lag = 10)
+```
+
+At 5% we cannot reject the null about residuals being white noise, so ARIMA(1,1,1) is a correct fit.
+
+
+## 8.1.4 Estimating parameters revisited
+
+There is also a way to **automatically** find the most attractive model. We will use the `arima.best.AIC` and `arima.best.BIC` functions.
+
+```{r}
+arima.best.AIC <- 
+  auto.arima(stock4,
+             d = 1,             # parameter d of ARIMA model
+             max.p = 6,         # Maximum value of p
+             max.q = 6,         # Maximum value of q
+             max.order = 12,    # maximum p+q
+             start.p = 1,       # Starting value of p in stepwise procedure
+             start.q = 1,       # Starting value of q in stepwise procedure
+             ic = "aic",        # Information criterion to be used in model selection.
+             stepwise = FALSE,  # if FALSE considers all models
+             allowdrift = TRUE, # include a constant
+             trace = TRUE)      # show summary of all models considered
+```
+
+This function estimate models with all possible combinations of model orders. However, it does not remove intermediate lags.
+
+The results might be surprising.
+```{r}
+coeftest(arima.best.AIC)
+```
+
+From our test results it seems that the best fit is ARIMA(1,1,1).
+
+```{r}
+AIC(arima.best.AIC, arima111_2)
+```
+
+The AIC is lower than for the best manually selected model.
+
+```{r}
+BIC(arima.best.AIC, arima111_2)
+```
+
+The BIC is lower than for the best manually selected model as well.
+
+Let's preform the Ljung-Box test:
+```{r}
+Box.test(resid(arima.best.AIC), type = "Ljung-Box", lag =  5)
+Box.test(resid(arima.best.AIC), type = "Ljung-Box", lag = 10)
+Box.test(resid(arima.best.AIC), type = "Ljung-Box", lag = 15)
+Box.test(resid(arima.best.AIC), type = "Ljung-Box", lag = 20)
+Box.test(resid(arima.best.AIC), type = "Ljung-Box", lag = 25)
+```
+
+Let's see correlograms for the residuals:
+```{r}
+par(mfrow = c(2, 1))  
+acf(resid(arima.best.AIC), 
+    lag.max = 48, 
+    lwd = 7, 
+    col = "dark green", 
+    na.action = na.pass,
+    ylim = c(-0.08, 0.05))
+pacf(resid(arima.best.AIC), 
+     lag.max = 48, 
+     lwd = 7, 
+     col = "dark green", 
+     na.action = na.pass)
+par(mfrow = c(1, 1))  
+```
+
+We observe significant effects around 16th-17th lags.
+
+Now let's search for the best model in terms of BIC criterion:
+```{r}
+arima.best.BIC <- 
+  auto.arima(stock4,
+             d = 1,             # parameter d of ARIMA model
+             max.p = 6,         # Maximum value of p
+             max.q = 6,         # Maximum value of q
+             max.order = 12,    # maximum p+q
+             start.p = 1,       # Starting value of p in stepwise procedure
+             start.q = 1,       # Starting value of q in stepwise procedure
+             ic = "bic",        # Information criterion to be used in model selection.
+             stepwise = FALSE,  # if FALSE considers all models
+             allowdrift = TRUE, # include a constant
+             trace = TRUE)      # show summary of all models considered
+```
+
+Let's see the model with lowest BIC value:
+```{r}
+coeftest(arima.best.BIC)
+```
+
+This is `ARIMA(1,1,1)` without constant.
+
+Let's compare it with `arima.best.AIC`, `arima111_2` models, in terms of BIC and AIC values:
+
+```{r}
+BIC(arima.best.BIC, arima.best.AIC, arima111_2)
+AIC(arima.best.BIC, arima.best.AIC, arima111_2)
+```
+
+It has indeed the lowest BIC value and AIC value.
+
+Next we do the same procedure with our `stock10`.
+
+```{r}
+arima.best.AIC.Stock10 <- 
+  auto.arima(stock10,
+             d = 1,             # parameter d of ARIMA model
+             max.p = 6,         # Maximum value of p
+             max.q = 6,         # Maximum value of q
+             max.order = 12,    # maximum p+q
+             start.p = 1,       # Starting value of p in stepwise procedure
+             start.q = 1,       # Starting value of q in stepwise procedure
+             ic = "aic",        # Information criterion to be used in model selection.
+             stepwise = FALSE,  # if FALSE considers all models
+             allowdrift = TRUE, # include a constant
+             trace = TRUE)      # show summary of all models considered
+```
+
+Let's see the results.
+```{r}
+coeftest(arima.best.AIC.Stock10)
+```
+
+Again from our test results it seems that the best fit is ARIMA(1,1,1).
+
+Let's also perform the Ljung-Box test:
+```{r}
+Box.test(resid(arima.best.AIC.Stock10), type = "Ljung-Box", lag =  5)
+Box.test(resid(arima.best.AIC.Stock10), type = "Ljung-Box", lag = 10)
+Box.test(resid(arima.best.AIC.Stock10), type = "Ljung-Box", lag = 15)
+Box.test(resid(arima.best.AIC.Stock10), type = "Ljung-Box", lag = 20)
+Box.test(resid(arima.best.AIC.Stock10), type = "Ljung-Box", lag = 25)
+```
+
+Let's see correlograms for the residuals:
+```{r}
+par(mfrow = c(2, 1))  
+acf(resid(arima.best.AIC.Stock10), 
+    lag.max = 48, 
+    lwd = 7, 
+    col = "dark green", 
+    na.action = na.pass,
+    ylim = c(-0.5, 0.5))
+pacf(resid(arima.best.AIC.Stock10), 
+     lag.max = 48, 
+     lwd = 7, 
+     col = "dark green", 
+     na.action = na.pass)
+par(mfrow = c(1, 1))  
+```
+
+We have a significant spike at the first lag.
+
+Let's now search for the best model in terms of BIC criterion again:
+
+```{r}
+arima.best.BIC.Stock10 <- 
+  auto.arima(stock10,
+             d = 1,             # parameter d of ARIMA model
+             max.p = 6,         # Maximum value of p
+             max.q = 6,         # Maximum value of q
+             max.order = 12,    # maximum p+q
+             start.p = 1,       # Starting value of p in stepwise procedure
+             start.q = 1,       # Starting value of q in stepwise procedure
+             ic = "bic",        # Information criterion to be used in model selection.
+             stepwise = FALSE,  # if FALSE considers all models
+             allowdrift = TRUE, # include a constant
+             trace = TRUE)      # show summary of all models considered
+```
+
+Again our automatic model selection indicate the ARIMA(1,1,1).
+
+Lets now build our `ARIMA(1,1,1)` for Stock10, our tenth financial instrument.
+
+```{r}
+arima111 <- Arima(stock10,  # variable
+                  order = c(1, 1, 1)  # (p,d,q) parameters
+                  )
+```
+
+So our model of choice will be:
+
+* `ARIMA(1,1,1)` - automated selection based on BIC
+* `ARIMA(1,1,1)` - automated selection based on AIC
+
+This model have:
+* lowest information criteria (AIC or BIC)
+* (almost) all parameters significant
+
+We will use this model for forecasting.
+
+## 8.2 Forecasting
+
+Lets see few last observations of our data set
+```{r}
+tail(stock4, 10)
+```
+
+We are going to produce forecasts for 10-periods ahead interval (since 2021-03-27).
+This will be our **out-of-sample** period.
+
+Let's make a prediction
+```{r}
+forecasts <- forecast(arima111_2, # model for prediction
+                      h = 10) # how many periods outside the sample
+```
+
+Lets see the result
+```{r}
+forecasts
+str(forecasts)
+```
+
+The forecasts are indexed with an observation number, not a date!
+
+To extract the point forecast (the first column) we need to reference to the `mean` object:
+```{r}
+forecasts$mean
+```
+
+Lets check the class of this object
+```{r}
+class(forecasts$mean)
+```
+
+It is a `ts` object, not `xts`!
+
+Anyway, the `as.numeric()` function allows to convert it to a simple numeric vector
+```{r}
+as.numeric(forecasts$mean)
+```
+
+The 80% and 95% confidence intervals are located in the `lower` and `upper` objects:
+```{r}
+forecasts$lower
+forecasts$upper
+```
+
+We are interested only in the second column (95% confidence interval).
+
+If we wanted to easily put together both real data and the forecast on the plot, we would have to convert both to `ts` or both to `xts` objects.
+
+The `xts` objects are more convenient and modern.
+
+We need a `data.frame` with data and index of dates to create an `xts` object:
+```{r}
+forecasts_data <- data.frame(f_mean  = as.numeric(forecasts$mean),
+                             f_lower = as.numeric(forecasts$lower[, 2]),
+                             f_upper = as.numeric(forecasts$upper[, 2]))
+```
+
+Let's see its first six observations:
+```{r}
+head(forecasts_data)
+```
+
+Let's add forcasted dates to our forecasted dataset.
+```{r}
+rownames(forecasts_data) <- seq(as.Date('2021-03-28'),as.Date('2021-04-06'), by = 1)
+
+forecasts_data <- xts(forecasts_data, order.by=as.Date(rownames(forecasts_data)))
+```
+
+We now merge our forcasted data and original dataset of `stock4` together.
+```{r}
+stock4$date <- seq(as.Date('2021-03-28'),as.Date('2021-04-06'), by = 1)
+
+stock4fcst <- cbind(stock4[,"y4"], forecasts_data)
+tail(stock4fcst, n = 10)
+
+```
+
+Lets finally plot the figure with the forecast and original series.
+
+Original data
+```{r}
+plot(stock4fcst[, c("y4", "f_mean", "f_lower", "f_upper")], 
+     major.ticks = "years", 
+     grid.ticks.on = "years",
+     grid.ticks.lty = 3,
+     main = "10 day forecast of fourth financial instrument",
+     col = c("black", "blue", "red", "green"))
+```
+
+Period is too long - lets see last part in more detail. We will exclude observations before march 2019:
+```{r}
+plot(stock4fcst["2021-03/", # limit the rows
+          c("y4", "f_mean", "f_lower", "f_upper")], 
+     major.ticks = "days", 
+     grid.ticks.on = "days",
+     grid.ticks.lty = 3,
+     main = "10 day forecast of fourth financial instrument",
+     col = c("black", "blue", "red", "green"))
+```
+
+Now, we will assess forecast quality.  
+
+Real values - last 10 observations (*note we take 10 last observations from in-sample period*)
+```{r}
+stock4fcst$y4 <- c(stock4fcst$y4[291:300,])
+stock4fcst1 <- tail(stock4fcst, 10)
+stock4fcst1
+```
+
+Finally we can calculate popular measures of ex-post prediction errors
+```{r}
+stock4fcst1$mae   <-  abs(stock4fcst1$y4 - stock4fcst1$f_mean)
+stock4fcst1$mse   <-  (stock4fcst1$y4 - stock4fcst1$f_mean) ^ 2
+stock4fcst1$mape  <-  abs((stock4fcst1$y4 - stock4fcst1$f_mean)/stock4fcst1$y4)
+stock4fcst1$amape <-  abs((stock4fcst1$y4 - stock4fcst1$f_mean)/(stock4fcst1$y4 + stock4fcst1$f_mean))
+stock4fcst1
+```
+
+Again let's apply the same procedure to our `stock10`.
+```{r}
+tail(stock10, 10)
+```
+
+Same procedure as before producing forecast for 10-periods ahead interval (since 2021-03-27).
+This will be our **out-of-sample** period.
+
+Our prediction model:
+```{r}
+forecasts <- forecast(arima111, # model for prediction
+                      h = 10) # how many periods outside the sample
+```
+
+Lets see the result
+```{r}
+forecasts
+str(forecasts)
+```
+
+The forecasts are indexed with an observation number, not a date!
+
+We extract the point forecast (the first column) by referencing the `mean` object:
+```{r}
+forecasts$mean
+```
+
+Lets check the class of this object
+```{r}
+class(forecasts$mean)
+```
+
+As before it is a `ts` object, not `xts`!
+
+We use `as.numeric()` function to convert to a numeric vector
+```{r}
+as.numeric(forecasts$mean)
+```
+
+The 80% and 95% confidence intervals are located in the `lower` and `upper` objects:
+```{r}
+forecasts$lower
+forecasts$upper
+```
+
+Our point of interest is the second column (95% confidence interval).
+
+Same procedure as before, we need a `data.frame` with data and index of dates to create an `xts` object:
+```{r}
+forecasts_data <- data.frame(f_mean  = as.numeric(forecasts$mean),
+                             f_lower = as.numeric(forecasts$lower[, 2]),
+                             f_upper = as.numeric(forecasts$upper[, 2]))
+```
+
+Let's see its first six observations:
+```{r}
+head(forecasts_data)
+```
+
+Let's add forecasted dates to our forecasted dataset.
+```{r}
+rownames(forecasts_data) <- seq(as.Date('2021-03-28'),as.Date('2021-04-06'), by = 1)
+
+forecasts_data <- xts(forecasts_data, order.by=as.Date(rownames(forecasts_data)))
+```
+
+We now merge our forecasted data and original dataset of `Stock10` together.
+```{r}
+stock10$date <- seq(as.Date('2021-03-28'),as.Date('2021-04-06'), by = 1)
+
+stock10fcst <- cbind(stock10[,"y10"], forecasts_data)
+tail(stock10fcst, n = 10)
+
+```
+
+Lets finally plot the figure with the forecast and original series.
+
+Original data
+```{r}
+plot(stock10fcst[, c("y10", "f_mean", "f_lower", "f_upper")], 
+     major.ticks = "years", 
+     grid.ticks.on = "years",
+     grid.ticks.lty = 3,
+     main = "10 day forecast of tenth financial instrument",
+     col = c("black", "blue", "red", "green"))
+```
+
+Period is too long - lets see last part in more detail. We will exclude observations before march 2019:
+```{r}
+plot(stock10fcst["2021-03/", # limit the rows
+          c("y10", "f_mean", "f_lower", "f_upper")], 
+     major.ticks = "days", 
+     grid.ticks.on = "days",
+     grid.ticks.lty = 3,
+     main = "10 day forecast of tenth financial instrument",
+     col = c("black", "blue", "red", "green"))
+```
+
+It looks okay.
+
+Next we assess forecast quality for `stock10`.
+
+Last 10 observations
+
+```{r}
+stock10fcst$y10 <- c(stock10fcst$y10[291:300,])
+stock10fcst1 <- tail(stock10fcst, 10)
+stock10fcst1
+```
+
+Finally we can calculate popular measures of ex-post prediction errors
+```{r}
+stock10fcst1$mae   <-  abs(stock10fcst1$y10 - stock10fcst1$f_mean)
+stock10fcst1$mse   <-  (stock10fcst1$y10 - stock10fcst1$f_mean) ^ 2
+stock10fcst1$mape  <-  abs((stock10fcst1$y10 - stock10fcst1$f_mean)/stock10fcst1$y10)
+stock10fcst1$amape <-  abs((stock10fcst1$y10 - stock10fcst1$f_mean)/(stock10fcst1$y10 + stock10fcst1$f_mean))
+stock10fcst1
+```
+
+As a result we were able to produce 10-steps ahead forecast for both our under analysis financial instruments, respectively `stock4` and `stock10`.
+
+From our forecast quality results we can see that MAPE and aMAPE values are pretty close to 0 indicating that our forecast is reliable and accurate for both our financial instruments.
