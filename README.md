@@ -1,13 +1,13 @@
 # Time-Series-Analysis-Home-Project
 
-##Project description
+## Project description
 
 The aim of the project is to compare accuracy of forecasts of prices of two cointegrated
 financial instruments with: a) the VECM/VAR model and b) two independent univariate ARIMA models.
 
 In oder to acomplish the task you should:
 
-1. Download the csv file with time series of prices of ten financial instruments: y1, y2, . . . , y10.
+1. Download the csv file with time series of prices of ten financial instruments: *y1, y2, . . . , y10*.
 
 2. Find one pair of cointegrated time series out of ten considered time series. Actually, there are more
 than one cointegrated pair, but you are supposed to find just one of them. If you found more than one,
